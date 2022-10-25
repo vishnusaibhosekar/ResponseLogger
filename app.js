@@ -1,146 +1,109 @@
 const express = require('express');
 const app = express();
-
-const PORT = process.env.PORT || 4001;
+const morgan = require('morgan');
 
 app.use(express.static('public'));
 
-const jellybeanBag = {
-  mystery: {
-    number: 4
-  },
-  lemon: {
-    number: 5
-  },
-  rootBeer: {
-    number: 25
-  },
-  cherry: {
-    number: 3
-  },
-  licorice: {
-    number: 1
-  }
-};
+const PORT = process.env.PORT || 4001;
 
-// Add your logging function here:
-const logRequest = verb => {
-  console.log(`${verb} Request Received`);
+const cards = [
+  {
+    id: 1,
+    suit: 'Clubs',
+    rank: '2'
+  },
+  {
+    id: 2,
+    suit: 'Diamonds',
+    rank: 'Jack'
+  },
+  {
+    id: 3,
+    suit: 'Hearts',
+    rank: '10'
+  }
+];
+let nextId = 4;
+
+// Logging
+if (!process.env.IS_TEST_ENV) {
+  app.use(morgan('short'));
 }
 
-
-app.get('/beans/', (req, res, next) => {
-  logRequest('GET');
-  res.send(jellybeanBag);
-  console.log('Response Sent');
-});
-
-app.post('/beans/', (req, res, next) => {
-  logRequest('POST');
-  let queryData = '';
+// Parsing
+app.use((req, res, next) => {
+  let bodyData = '';
   req.on('data', (data) => {
-    queryData += data;
+    bodyData += data;
   });
-
   req.on('end', () => {
-    const body = JSON.parse(queryData);
-    const beanName = body.name;
-    if (jellybeanBag[beanName] || jellybeanBag[beanName] === 0) {
-      return res.status(400).send('Bag with that name already exists!');
+    if (bodyData) {
+      req.body = JSON.parse(bodyData);
     }
-    const numberOfBeans = Number(body.number) || 0;
-    jellybeanBag[beanName] = {
-      number: numberOfBeans
-    };
-    res.send(jellybeanBag[beanName]);
-    console.log('Response Sent');
+    
   });
 });
 
-app.get('/beans/:beanName', (req, res, next) => {
-  logRequest('GET');
-  const beanName = req.params.beanName;
-  if (!jellybeanBag[beanName]) {
-    console.log('Response Sent');
-    return res.status(404).send('Bean with that name does not exist');
-  }
-  res.send(jellybeanBag[beanName]);
-  console.log('Response Sent');
+// Get all Cards
+app.get('/cards/', (req, res, next) => {
+  res.send(cards);
 });
 
-
-app.post('/beans/:beanName/add', (req, res, next) => {
-  logRequest('POST');
-  const beanName = req.params.beanName;
-  if (!jellybeanBag[beanName]) {
-    return res.status(404).send('Bean with that name does not exist');
+// Create a new Card
+app.post('/cards/', (req, res, next) => {
+  const newCard = req.body;
+  const validSuits = ['Clubs', 'Diamonds', 'Hearts', 'Spades'];
+  const validRanks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'];
+  if (validSuits.indexOf(newCard.suit) === -1 || validRanks.indexOf(newCard.rank) === -1) {
+    return res.status(400).send('Invalid card!');
   }
-  let queryData = '';
-  req.on('data', (data) => {
-    queryData += data;
-  });
-
-  req.on('end', () => {
-    const numberOfBeans = Number(JSON.parse(queryData).number) || 0;
-    jellybeanBag[beanName].number += numberOfBeans;
-    res.send(jellybeanBag[beanName]);
-    console.log('Response Sent');
-  });
+  newCard.id = nextId++;
+  cards.push(newCard);
+  res.status(201).send(newCard);
 });
 
-app.post('/beans/:beanName/remove', (req, res, next) => {
-  logRequest('POST');
-  const beanName = req.params.beanName;
-  if (!jellybeanBag[beanName]) {
-    return res.status(404).send('Bean with that name does not exist');
+// Get a single Card
+app.get('/cards/:cardId', (req, res, next) => {
+  const cardId = Number(req.params.cardId);
+  const cardIndex = cards.findIndex(card => card.id === cardId);
+  if (cardIndex === -1) {
+    return res.status(404).send('Card not found');
   }
-  let queryData = '';
-  req.on('data', (data) => {
-    queryData += data;
-  });
-
-  req.on('end', () => {
-    const numberOfBeans = Number(JSON.parse(queryData).number) || 0;
-    if (jellybeanBag[beanName].number < numberOfBeans) {
-      return res.status(400).send('Not enough beans in the jar to remove!');
-    }
-    jellybeanBag[beanName].number -= numberOfBeans;
-    res.send(jellybeanBag[beanName]);
-    console.log('Response Sent');
-  });
+  res.send(cards[cardIndex]);
 });
 
-app.delete('/beans/:beanName', (req, res, next) => {
-  logRequest('DELETE');
-  const beanName = req.params.beanName;
-  if (!jellybeanBag[beanName]) {
-    return res.status(404).send('Bean with that name does not exist');
+// Update a Card
+app.put('/cards/:cardId', (req, res, next) => {
+  const cardId = Number(req.params.cardId);
+  const cardIndex = cards.findIndex(card => card.id === cardId);
+  if (cardIndex === -1) {
+    return res.status(404).send('Card not found');
   }
-  jellybeanBag[beanName] = null;
+  const newCard = req.body;
+  const validSuits = ['Clubs', 'Diamonds', 'Hearts', 'Spades'];
+  const validRanks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'];
+  if (validSuits.indexOf(newCard.suit) === -1 || validRanks.indexOf(newCard.rank) === -1) {
+    return res.status(400).send('Invalid card!');
+  }
+  if (!newCard.id || newCard.id !== cardId) {
+    newCard.id = cardId;
+  }
+  cards[cardIndex] = newCard;
+  res.send(newCard);
+});
+
+// Delete a Card
+app.delete('/cards/:cardId', (req, res, next) => {
+  const cardId = Number(req.params.cardId);
+  const cardIndex = cards.findIndex(card => card.id === cardId);
+  if (cardIndex === -1) {
+    return res.status(404).send('Card not found');
+  }
+  cards.splice(cardIndex, 1);
   res.status(204).send();
-  console.log('Response Sent');
 });
 
-app.put('/beans/:beanName/name', (req, res, next) => {
-  logRequest('PUT');
-  const beanName = req.params.beanName;
-  if (!jellybeanBag[beanName]) {
-    return res.status(404).send('Bean with that name does not exist');
-  }
-  let queryData = '';
-  req.on('data', (data) => {
-    queryData += data;
-  });
-
-  req.on('end', () => {
-    const newName = JSON.parse(queryData).name;
-    jellybeanBag[newName] = jellybeanBag[beanName];
-    jellybeanBag[beanName] = null;
-    res.send(jellybeanBag[newName]);
-    console.log('Response Sent');
-  });
-});
-
+// Start the server
 app.listen(PORT, () => {
   console.log(`Server is listening on port ${PORT}`);
 });
